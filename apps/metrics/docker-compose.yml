@@ -1,0 +1,126 @@
+version: '3.7'
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+  loki_data: {}
+
+networks:
+  main:
+    external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=metrics
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on: 
+      - cadvisor
+    networks:
+      - main
+    restart: always
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.prometheus.entrypoints=https
+      - traefik.http.routers.prometheus.rule=Host(`prometheus.corusm.de`)
+      - traefik.http.routers.prometheus.tls=true
+      - traefik.http.routers.prometheus.tls.certresolver=letsencrypt
+      - traefik.tcp.services.prometheus.loadbalancer.server.port=9090
+      - traefik.docker.network=main
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    user: "472"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - main
+    restart: always
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.grafana.entrypoints=https
+      - traefik.http.routers.grafana.rule=Host(`grafana.corusm.de`)
+      - traefik.http.routers.grafana.tls=true
+      - traefik.http.routers.grafana.tls.certresolver=letsencrypt
+      - traefik.tcp.services.grafana.loadbalancer.server.port=3000
+      - traefik.docker.network=main
+    logging: *default-logging
+
+  loki:
+    image: grafana/loki:2.4.2
+    container_name: loki
+    command: -config.file=/etc/loki/loki.yml --ingester.wal-enabled=false
+    networks:
+      - main
+    volumes:
+      - ./loki:/etc/loki
+      - loki_data:/data/loki
+    ports: 
+      - 127.0.0.1:3100:3100
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.loki.entrypoints=https
+      - traefik.http.routers.loki.rule=Host(`loki.corusm.de`)
+      - traefik.http.routers.loki.tls=true
+      - traefik.http.routers.loki.tls.certresolver=letsencrypt
+      - traefik.tcp.services.loki.loadbalancer.server.port=3100
+      - traefik.docker.network=main
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - main
+    logging: *default-logging
+
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    privileged: true
+    command: ["-logtostderr", "-docker_only"]
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /cgroup:/cgroup:ro
+    restart: unless-stopped
+    networks:
+      - main
+    logging: *default-logging

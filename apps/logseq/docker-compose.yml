@@ -1,0 +1,31 @@
+version: "3.7"
+
+networks:
+   main:
+       external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=logseq
+
+services:
+    roamresearch:
+      image: ghcr.io/logseq/logseq-webapp:latest
+      container_name: roamresearch
+      restart: on-failure
+      networks:
+        - "main"
+      labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.logseq.entrypoints=https
+      - traefik.http.routers.logseq.rule=Host(`logseq.corusm.de`)
+      - traefik.http.routers.logseq.tls=true
+      - traefik.http.routers.logseq.tls.certresolver=letsencrypt
+      - traefik.tcp.services.logseq.loadbalancer.server.port=8065
+      - traefik.docker.network=main
+      logging: *default-logging

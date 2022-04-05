@@ -1,0 +1,25 @@
+version: '3.7'
+networks:
+    main:
+       external: true
+
+    radicale:
+      image: tomsquest/docker-radicale
+      container_name: radicale
+      restart: unless-stopped
+      volumes:
+        - /home/niklas/docker/radicale/data:/data
+        - /home/niklas/docker/radicale/config:/config:ro
+      networks: 
+        - "main"
+      labels:
+         - traefik.enable=true
+         - traefik.http.routers.radicale.rule=Host(`radicale.corusm.de`)
+         - traefik.http.routers.radicale.entrypoints=web
+         - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+         - traefik.http.routers.radicale.middlewares=redirect-to-https@docker
+         - traefik.http.routers.radicale-secured.rule=Host(`radicale.corusm.de`)
+         - traefik.http.routers.radicale-secured.tls=true
+         - traefik.http.routers.radicale-secured.tls.certresolver=myhttpchallenge
+         - traefik.http.services.radicale-secured.loadbalancer.server.port=5232
+         - traefik.http.routers.radicale-secured.entrypoints=web-secure

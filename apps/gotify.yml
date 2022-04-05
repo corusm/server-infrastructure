@@ -1,0 +1,39 @@
+version: "3.7"
+
+networks:
+    main:
+        external: true
+
+volumes:
+    gotify-data: {}
+
+x-logging:
+    &default-logging
+    driver: loki
+    options:
+        mode: non-blocking
+        loki-url: http://localhost:3100/loki/api/v1/push
+        loki-external-labels: host=corusm.de,stack=gotify
+
+services:
+    gotifyresearch:
+        image: gotify/server
+        container_name: gotify
+        restart: on-failure
+        networks:
+            - "main"
+        volumes:
+            - gotify-data:/app/data
+        environment:
+            TZ: "Europe/Berlin"
+        labels:
+            - com.centurylinklabs.watchtower.enable=true
+            - traefik.enable=true
+            - traefik.http.routers.gotify.entrypoints=https
+            - traefik.http.routers.gotify.rule=Host(`gotify.corusm.de`)
+            - traefik.http.routers.gotify.tls=true
+            - traefik.http.routers.gotify.tls.certresolver=letsencrypt
+            - traefik.tcp.services.gotify.loadbalancer.server.port=80
+            - traefik.docker.network=main
+        logging: *default-logging
+

@@ -1,0 +1,52 @@
+version: "3.7"
+
+networks:
+  # vault-network:
+  main:
+    external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=vault
+
+services:
+  vault-server:
+    image: vault:latest
+    container_name: vault-server
+    environment:
+      VAULT_ADDR: "https://vault.corusm.de"
+      # VAULT_DEV_ROOT_TOKEN_ID: vault-plaintext-root-token
+      # VAULT_LOCAL_CONFIG: '{"backend": {"file": {"path": "/vault/file"}}, "default_lease_ttl": "168h", "max_lease_ttl": "720h"}'
+    volumes:
+      - ./vault/plugins:/vault/plugins
+      - ./vault/config:/vault/config
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - main
+      # - vault-network
+    entrypoint: vault server -config=/vault/config/vault.json
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.vault.entrypoints=https
+      - traefik.http.routers.vault.rule=Host(`secrets.corusm.de`)
+      - traefik.http.routers.vault.tls=true
+      - traefik.http.routers.vault.tls.certresolver=letsencrypt
+      - traefik.tcp.services.vault.loadbalancer.server.port=8200
+      - traefik.docker.network=main
+    logging: *default-logging
+
+
+  # vault-client:
+  #   container_name: vault-client
+  #   build: .
+  #   environment:
+  #     VAULT_ADDR: "https://vault.corusm.de"
+  #   networks:
+  #     - vault-network
+  #     - main

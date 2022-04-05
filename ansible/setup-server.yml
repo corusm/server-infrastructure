@@ -1,0 +1,113 @@
+---
+- name: Install Docker and Setup Server
+  hosts: server
+  become: true
+  gather_facts: false
+  user: root
+  vars_files:
+    - vars/tokens.yml
+
+  tasks:
+    # Change to my new Server
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        delay: 30
+        timeout: 180
+        state: started
+
+    # Install Aptitude
+    - name: Install aptitude using apt
+      apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
+
+    # Install Required System Packages
+    - name: Install required system packages
+      apt: name={{ item }} state=latest update_cache=yes
+      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools']
+
+    # Add Docker GPG Key
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    # Add Docker Repo
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    # Install Docker CE
+    - name: Update apt and install docker-ce
+      apt: update_cache=yes name=docker-ce state=latest
+
+    # Install Docker Python Module
+    - name: Install Docker Module for Python
+      pip:
+        name: 
+          - docker
+          - docker-compose
+
+    # Install Docker Compose
+    - name: Install Docker-Compose CLI
+      get_url:
+        url: https://github.com/docker/compose/releases/download/1.27.3/docker-compose-Linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 755
+
+    # Create Group
+    - name: Create group
+      group:
+        name: "admin"
+        state: present
+
+    - name: Allow 'admin' group to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%admin'
+        line: '%admin ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+
+    - name: Add sudoers users to admin group
+      user:
+        name=niklas
+        groups=admin
+        append=yes
+        state=present
+        createhome=yes
+
+
+    - name: Set up authorized keys for the admin user
+      authorized_key: user=niklas key="{{item}}"
+      with_file:
+        - ~/.ssh/id_rsa.pub
+
+    - name: Copy Setup-Server.sh
+      template:
+        src: setup-server.sh
+        dest: /home/niklas
+    
+    - name: Changing perm of "/home/niklas/setup-server.sh", adding "+x"
+      file: dest=/home/niklas/setup-server.sh mode=+x
+
+    - name: Change User Shell to Bash
+      become: yes
+      user:
+        name: niklas
+        shell: /bin/bash
+
+    - name: Create a Docker Network
+      docker_network:
+        name: main
+
+    - name: Create a record pointing on the new server
+      cloudflare_dns:
+        zone: corusm.de
+        record: "{{ arecord }}"
+        type: A
+        value: "{{ hostvars[server]['ansible_default_ipv4']['address'] }}"
+        account_email: niklas.leinz@me.com
+        account_api_key: "{{ cloudflare_token }}"
+      register: record

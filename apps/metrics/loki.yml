@@ -1,0 +1,27 @@
+version: "3.7"
+
+networks:
+    main:
+      external: true
+
+services:
+  loki:
+    image: grafana/loki:2.4.2
+    entrypoint: 
+      - /usr/bin/loki
+      - -config.file=/etc/config/loki.yaml
+    networks:
+      - main
+    volumes:
+      - ./loki/loki.yaml:/etc/config/loki.yaml
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.loki.rule=Host(`loki.corusm.de`)
+      - traefik.http.routers.loki.entrypoints=web
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.http.routers.loki.middlewares=redirect-to-https@docker
+      - traefik.http.routers.loki-secured.rule=Host(`loki.corusm.de`)
+      - traefik.http.routers.loki-secured.tls=true
+      - traefik.http.routers.loki-secured.tls.certresolver=myhttpchallenge
+      - traefik.http.services.loki.loadbalancer.server.port=3100
+      - traefik.http.routers.loki-secured.entrypoints=web-secure

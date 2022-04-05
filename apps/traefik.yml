@@ -1,0 +1,86 @@
+version: '3.7' # 2.2
+
+networks:
+  main:
+    external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=traefik
+
+services:
+  proxy:
+    image: "traefik:v2.2"
+    container_name: reverse-proxy
+    restart: always
+    command:
+      - --providers.docker
+      - --api
+      - --log=true
+      - --entrypoints.http.address=:80/tcp
+      - --entrypoints.https.address=:443/tcp
+      - --entrypoints.wireguard.address=:443/udp
+      - --certificatesresolvers.letsencrypt.acme.caserver=https://acme-v02.api.letsencrypt.org/directory
+      - --certificatesresolvers.letsencrypt.acme.email=postmaster@test.com
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+    ports:
+      - 80:80/tcp
+      - 443:443/tcp
+      - 443:443/udp
+    networks:
+      - main
+    volumes:
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik/ # gerade unsafe???
+      - ./certs:/etc/certs:ro
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      # Dashboard
+      - traefik.http.routers.traefik.rule=Host(`proxy.corusm.de`)
+      - traefik.http.routers.traefik.service=api@internal
+      - traefik.http.routers.traefik.tls.certresolver=letsencrypt
+      - traefik.http.routers.traefik.entrypoints=https
+      - traefik.http.routers.traefik.middlewares=traefik-auth
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=test:$$34f$$.L234R4y$$/Ojdfg3pSGiT/fldfd42uS1" # change this password
+      # echo $(htpasswd -nb username password) | sed -e s/\\$/\\$\\$/g
+
+      # global redirect to https
+      - traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)
+      - traefik.http.routers.http-catchall.entrypoints=http
+      - traefik.http.routers.http-catchall.middlewares=redirect-to-https
+      # middleware redirect
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      - traefik.docker.network=main
+    logging: *default-logging
+
+  watchtower:
+    command: --label-enable
+    container_name: watchtower
+    image: containrrr/watchtower
+    restart: always
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_INCLUDE_STOPPED: "true"
+      WATCHTOWER_POLL_INTERVAL: 600
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_HTTP_API_METRICS: "true"
+      WATCHTOWER_HTTP_API_TOKEN: 7{SgUv)78KwW])M^
+      DOCKER_CONFIG: /config
+      WATCHTOWER_NOTIFICATIONS: gotify
+      WATCHTOWER_NOTIFICATION_GOTIFY_URL: "https://gotify.corusm.de/"
+      WATCHTOWER_NOTIFICATION_GOTIFY_TOKEN: "AM4Y7gTS3LfnuI2"
+    networks:
+      - main
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/niklas/.docker/:/config
+    logging: *default-logging

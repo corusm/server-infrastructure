@@ -1,0 +1,7 @@
+mailcow/data/*
+mlflow-server/*/
+letsencrypt/*
+acme/*
+bitwarden/data
+.env
+*-conf

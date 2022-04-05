@@ -1,0 +1,97 @@
+# Contains: DEV-WEBSERVER, REGISTRY, SRV API, JENKINS, CODE SERVER
+
+version: '3.7' # 2.2
+
+networks:
+    main:
+       external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=corusmdev
+
+services:
+  registry:
+    image: registry:2
+    container_name: container-registry
+    volumes:
+      - /home/niklas/docker/images:/data
+      - /home/niklas/docker/auth:/auth
+    networks:
+      - "main"
+    environment:
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: Registry-Realm
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/registry.passwd
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.registry.entrypoints=https
+      - traefik.http.routers.registry.rule=Host(`registry.corusm.de`)
+      - traefik.http.routers.registry.tls=true
+      - traefik.http.routers.registry.tls.certresolver=letsencrypt
+      - traefik.tcp.services.registry.loadbalancer.server.port=80
+      - traefik.docker.network=main  
+    logging: *default-logging
+    # https://betterprogramming.pub/deploy-a-docker-registry-using-tls-and-htpasswd-56dd57a1215a
+
+  jenkins:
+    restart: always
+    container_name: jenkins
+    image: jenkins/jenkins:lts
+    networks:
+      - "main"
+    user: root
+    privileged: true
+    #ports:
+    #  - 5552:8080
+    #  - 5554:50000
+    expose:
+      - 8080
+      - 50000
+    volumes:
+      - /home/niklas/docker/jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      #- /usr/local/bin/docker:/usr/local/bin/docker
+    environment:
+      - PLUGINS_FORCE_UPGRADE=true
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.jenkins.entrypoints=https
+      - traefik.http.routers.jenkins.rule=Host(`jenkins.corusm.de`)
+      - traefik.http.routers.jenkins.tls=true
+      - traefik.http.routers.jenkins.tls.certresolver=letsencrypt
+      - traefik.tcp.services.jenkins.loadbalancer.server.port=80
+      - traefik.docker.network=main  
+    logging: *default-logging
+
+  # code-server:
+  #   image: ghcr.io/linuxserver/code-server
+  #   container_name: code-server
+  #   environment:
+  #     - TZ=Europe/London
+  #     - PASSWORD=niklaslotti
+  #     - SUDO_PASSWORD=niklaslotti
+  #   volumes:
+  #     - /home/niklas/docker/vs-config:/confi #port: 8443
+  #     - /home/niklas/docker/dev:/home/dev
+  #   restart: unless-stopped
+  #   networks:
+  #     - "main"
+  #   labels:
+  # - com.centurylinklabs.watchtower.enable=true
+  # - traefik.enable=true
+  # - traefik.http.routers.code.entrypoints=https
+  # - traefik.http.routers.code.rule=Host(`code.corusm.de`)
+  # - traefik.http.routers.code.tls=true
+  # - traefik.http.routers.code.tls.certresolver=letsencrypt
+  # - traefik.tcp.services.code.loadbalancer.server.port=80
+  # - traefik.docker.network=main  
+  #   logging: *default-logging

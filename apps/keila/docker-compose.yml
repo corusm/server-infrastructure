@@ -1,0 +1,56 @@
+version: "3.7"
+
+networks:
+  main:
+    external: true
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=keila
+
+services:
+  keila:
+    image: pentacent/keila:latest
+    container_name: keila
+    networks:
+      - main
+    depends_on:
+      - postgres-keila
+    environment:
+      SECRET_KEY_BASE: LOOK-DOCS-AND-CHANGE-ME
+      DB_URL: postgres://postgres:postgres@postgres/postgres
+      URL_HOST: keila.corusm.de
+      URL_PORT: 443
+      MAILER_SMTP_HOST: smtp.corusm.de
+      MAILER_SMTP_USER: niklas@corusm.de
+      MAILER_SMTP_PASSWORD: CHANGE-ME
+      URL_SCHEMA: https
+      KEILA_USER: niklas.leinz@me.com
+      KEILA_PASSWORD: LOOK-DOCS-AND-CHANGE-ME
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.keila.entrypoints=https
+      - traefik.http.routers.keila.rule=Host(`keila.corusm.de`)
+      - traefik.http.routers.keila.tls=true
+      - traefik.http.routers.keila.tls.certresolver=letsencrypt
+      - traefik.tcp.services.keila.loadbalancer.server.port=4000
+      - traefik.http.routers.keila.service=keilaService"
+      - traefik.http.services.keilaService.loadbalancer.server.port=4000
+      - traefik.http.services.keilaService.loadbalancer.passhostheader=true
+      - traefik.docker.network=main
+      # https://www.keila.io/docs/configuration
+    logging: *default-logging
+
+  postgres-keila:
+    image: postgres:alpine
+    container_name: postgres-keila
+    networks:
+      - main
+    environment:
+      POSTGRES_PASSWORD: postgres
+    logging: *default-logging

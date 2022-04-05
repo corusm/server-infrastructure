@@ -1,0 +1,26 @@
+version: "3"
+
+services:
+  languagetool:
+    image: erikvl87/languagetool
+    container_name: languagetool
+    networks:
+      - main
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.lt.entrypoints=https
+      - traefik.http.routers.lt.rule=Host(`lt.corusm.de`)
+      - traefik.http.routers.lt.tls=true
+      - traefik.http.routers.lt.tls.certresolver=letsencrypt
+      - traefik.http.routers.lt.service=ltService
+      - traefik.http.services.ltService.loadbalancer.server.port=8010
+      - traefik.http.services.ltService.loadbalancer.passhostheader=true
+      - traefik.docker.network=main
+
+networks:
+    main:
+      external: true
+
+# DOCS
+# Add this domain to your lt client/extention: https://lt.corusm.de/v2

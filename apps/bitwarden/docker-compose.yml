@@ -1,0 +1,57 @@
+version: '3.7'
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=bitwarden
+
+services:
+  bitwarden:
+    image: vaultwarden/server:latest
+    container_name: bitwarden
+    restart: unless-stopped
+    volumes:
+      - vaultwarden-data:/data/
+    environment:
+      - YUBICO_CLIENT_ID=${YUBICO_CLIENT_ID}
+      - YUBICO_SECRET_KEY=${YUBICO_SECRET_KEY}
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.http.routers.bitwarden.entrypoints=https
+      - traefik.http.routers.bitwarden.rule=Host(`password.corusm.de`)
+      - traefik.http.routers.bitwarden.tls=true
+      - traefik.http.routers.bitwarden.tls.certresolver=letsencrypt
+      - traefik.tcp.services.bitwarden.loadbalancer.server.port=80
+      - traefik.docker.network=main
+    networks:
+      - main
+    logging: *default-logging
+
+  backup:
+    image: ttionya/vaultwarden-backup:latest
+    container_name: bitwarden_backup
+    restart: always
+    environment:
+      RCLONE_REMOTE_NAME: 'corusm'
+      RCLONE_REMOTE_DIR: 'Backups/bitwarden'
+      CRON: '5 4 */10 * *'
+      ZIP_ENABLE: 'TRUE'
+      ZIP_PASSWORD: ${ZIP_PASSWORD}
+      ZIP_TYPE: 'zip'
+      BACKUP_KEEP_DAYS: 20
+    volumes:
+      - vaultwarden-data:/bitwarden/data/
+      - /home/niklas/.config/:/config/ # Adjust user here!
+    # configure rclone in ~/.config/rclone/rclone.conf
+    logging: *default-logging
+
+volumes:
+  vaultwarden-data:
+
+networks:
+  main:
+    external: true

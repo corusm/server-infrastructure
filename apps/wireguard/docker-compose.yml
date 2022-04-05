@@ -1,0 +1,44 @@
+version: "3.7"
+
+x-logging:
+  &default-logging
+  driver: loki
+  options:
+    mode: non-blocking
+    loki-url: http://localhost:3100/loki/api/v1/push
+    loki-external-labels: host=corusm.de,stack=wireguard
+
+networks:
+  main:
+    external: true
+
+services:
+  wireguard:
+    image: linuxserver/wireguard
+    container_name: wireguard
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SERVERPORT=443
+      - SERVERURL=vpn.corusm.de #optional
+      - PEERS=2 # How many peers to generate for you (clients)
+      - PEERDNS=8.8.8.8 # Set it to point to pihole
+      # - INTERNAL_SUBNET=10.6.0.0
+    volumes:
+      - ./wg-conf:/config
+      - /lib/modules:/lib/modules
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    networks:
+      - main
+    labels:
+      # Watchtower Update
+      - com.centurylinklabs.watchtower.enable=true
+      - traefik.enable=true
+      - traefik.udp.routers.wireguard.entrypoints=wireguard
+      - traefik.udp.services.wireguard.loadbalancer.server.port=51820
+    logging: *default-logging
