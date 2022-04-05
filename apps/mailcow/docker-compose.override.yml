@@ -1,0 +1,34 @@
+version: '2.1'
+services:
+    nginx-mailcow:
+      labels:
+        - com.centurylinklabs.watchtower.enable=true
+        - traefik.enable=true
+        - traefik.http.routers.nginx-mailcow.entrypoints=https
+        - traefik.http.routers.nginx-mailcow.rule=Host(`mail.corusm.de`)
+        - traefik.http.routers.nginx-mailcow.tls=true
+        - traefik.http.routers.nginx-mailcow.tls.certresolver=letsencrypt
+        - traefik.tcp.services.nginx-mailcow.loadbalancer.server.port=80
+        - traefik.docker.network=main
+      networks:
+        main:
+    certdumper:
+        image: humenius/traefik-certs-dumper
+        container_name: traefik_certdumper
+        restart: unless-stopped
+        network_mode: none
+        command: --restart-containers mailcowdockerized_postfix-mailcow_1,mailcowdockerized_dovecot-mailcow_1
+        volumes:
+          # mount the folder which contains Traefik's `acme.json' file
+          #   in this case Traefik is started from its own docker-compose in ../traefik
+          - /home/niklas/corusm-docker/letsencrypt:/traefik:ro
+          # mount mailcow's SSL folder
+          - /var/run/docker.sock:/var/run/docker.sock:ro
+          - ./data/assets/ssl:/output:rw
+        environment:
+          # only change this, if you're using another domain for mailcow's web frontend compared to the standard config
+          #- DOMAIN=${MAILCOW_HOSTNAME}
+          - DOMAIN=mail.corusm.de   #### Hier eure Domain ohne mail angeben ###
+networks:
+  main:
+    external: true

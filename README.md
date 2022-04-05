@@ -80,3 +80,4 @@ In order to get this repo to work for you, you must change my domain to yours.
 | Sharelatex         | Self-Hosted Overleaf Server                                                       |
 | Traefik            | Reverse Proxy Service                                                             |
 | Watchtower         | Automated Container Updates                                                       |
+| FreshRSS           | RSS Reader                                                                        |
