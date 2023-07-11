@@ -1,3 +1,4 @@
 --- 
-cloudflare_token: "ADDTOKEN"
-arecord: "mynewserver"
+# cloudflare_token: "ADDTOKEN"
+# arecord: ""
+github_access_token: "addtoken"

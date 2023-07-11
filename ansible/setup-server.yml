@@ -8,15 +8,6 @@
     - vars/tokens.yml
 
   tasks:
-    # Change to my new Server
-    - name: Wait for SSH to come up
-      wait_for:
-        host: "{{ inventory_hostname }}"
-        port: 22
-        delay: 30
-        timeout: 180
-        state: started
-
     # Install Aptitude
     - name: Install aptitude using apt
       apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
@@ -24,7 +15,7 @@
     # Install Required System Packages
     - name: Install required system packages
       apt: name={{ item }} state=latest update_cache=yes
-      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools']
+      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools', 'git']
 
     # Add Docker GPG Key
     - name: Add Docker GPG apt Key
@@ -84,14 +75,6 @@
       with_file:
         - ~/.ssh/id_rsa.pub
 
-    - name: Copy Setup-Server.sh
-      template:
-        src: setup-server.sh
-        dest: /home/niklas
-    
-    - name: Changing perm of "/home/niklas/setup-server.sh", adding "+x"
-      file: dest=/home/niklas/setup-server.sh mode=+x
-
     - name: Change User Shell to Bash
       become: yes
       user:
@@ -102,12 +85,34 @@
       docker_network:
         name: main
 
-    - name: Create a record pointing on the new server
-      cloudflare_dns:
-        zone: corusm.de
-        record: "{{ arecord }}"
-        type: A
-        value: "{{ hostvars[server]['ansible_default_ipv4']['address'] }}"
-        account_email: niklas.leinz@me.com
-        account_api_key: "{{ cloudflare_token }}"
-      register: record
+    # - name: Create a record pointing on the new server
+    #   cloudflare_dns:
+    #     zone: corusm.de
+    #     record: "{{ arecord }}"
+    #     type: A
+    #     value: "{{ hostvars[server]['ansible_default_ipv4']['address'] }}"
+    #     account_email: niklas.leinz@me.com
+    #     account_api_key: "{{ cloudflare_token }}"
+    #   register: record
+
+    - name: Generate SSH key pair on remote machine
+      openssh_keypair:
+        path: /home/niklas/.ssh/id_rsa
+        size: 2048
+      register: ssh_key
+      delegate_to: "{{ inventory_hostname }}"
+      become_user: niklas
+
+    - name: Authorize key with GitHub
+      github_key:
+        name: Access Key for Some Machine
+        token: "{{ github_access_token }}"
+        pubkey: "{{ ssh_key.public_key }}"
+      delegate_to: localhost
+
+    - name: Clone corusm/corusm-docker repository
+      git:
+        repo: 'git@github.com:corusm/corusm-docker.git'
+        dest: /home/niklas/cybathlon/corusm-docker
+        key_file: /home/niklas/.ssh/id_rsa
+      become_user: niklas
